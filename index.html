@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="uz">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Landing ochilganda hero rasmni JS kutmasdan darhol yuklay boshlaymiz
+      if ('true' === 'true' || /^#?nipt/.test(location.hash) || /\/nipt\/?$/.test(location.pathname)) {
+        var l = document.createElement('link')
+        l.rel = 'preload'; l.as = 'image'; l.href = (location.pathname.endsWith('/nipt') ? '/' : '') + 'landing/hero.webp'
+        l.setAttribute('fetchpriority', 'high')
+        document.head.appendChild(l)
+      }
+    </script>
+    <title>NIPT — homiladorlikda genetik tekshiruv | VIAMED</title>
+    <meta name="description" content="NIPT — ona qonidan olinadigan genetik tekshiruv. Homiladorlikning 10-haftasidan. Genetik shifokor maslahati bepul." />
+    <script type="module" crossorigin src="./assets/index-D6dxt9J3.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BAS_s0wo.css">
+  </head>
+  <body>
+    <div id="root">
+      <!-- JS yuklanguncha ko'rinadigan yengil belgi; React uni o'z sahifasi bilan almashtiradi -->
+      <div style="min-height:100vh;display:grid;place-items:center;background:#f3f4f6;font-family:system-ui,sans-serif">
+        <div style="text-align:center;color:#1463f3;font-weight:700;font-size:22px;letter-spacing:-0.02em">VIA<span style="color:#3fae2a">MED</span></div>
+      </div>
+    </div>
+  </body>
+</html>
