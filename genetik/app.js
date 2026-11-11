@@ -1,8 +1,12 @@
 (function () {
   'use strict'
-  // Arizalar mavjud oqimga ketadi: qabul-bot /api/lead → operator Telegram guruhi + leads.db.
-  // CORS faqat viamed-clinic.github.io uchun ochiq — boshqa domenga ko'chirilsa nginx'ga qo'shish kerak.
-  var ENDPOINT = 'https://viamed.azimboyev.uz/api/lead'
+  // Arizalar VIAMED CRM'ga tushadi (viamed-api: /api/v1/public/web-lead) va operator Telegram guruhiga xabar ketadi.
+  // 2-qadam (ixtiyoriy): bemor holati va tahlillari — faqat serverda saqlanadi, CRM orqali ochiladi.
+  // CORS: viamed-api CORS_ORIGINS da sahifa domeni bo'lishi kerak.
+  var API = window.LEAD_API || 'https://viamed.azimboyev.uz/api/v1/public/web-lead'
+  var REVIEW = !!window.REVIEW_MODE // ko'rib chiqish nusxasi: hech narsa yuborilmaydi
+  var MAX_FILES = 5
+  var MAX_SIZE = 10 * 1024 * 1024
   var C = window.CONTENT
   var ICONS = {
     award: '<path d="M12 15a7 7 0 1 0 0-14 7 7 0 0 0 0 14z"/><path d="M8.2 13.9 7 23l5-3 5 3-1.2-9.1"/>',
@@ -23,6 +27,7 @@
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] }) }
   function money(n) { return n.toLocaleString('ru-RU').replace(/,/g, ' ') }
+  function $(id) { return document.getElementById(id) }
 
   var lang = 'uz'
   try { var saved = localStorage.getItem('vm_lang'); if (saved === 'ru' || saved === 'uz') lang = saved } catch (e) {}
@@ -34,6 +39,8 @@
     campaign: (params.get('utm_campaign') || '').slice(0, 80),
     content: (params.get('utm_content') || '').slice(0, 80)
   }
+
+  var state = { plan: 'consult', token: '', name: '', files: [] }
 
   function t(key) { var v = C[lang][key]; return v == null ? C.uz[key] : v }
 
@@ -51,24 +58,20 @@
       }).join('')
     })
 
-    document.getElementById('creds').innerHTML = t('creds').map(function (c) {
-      return '<li' + (c.todo ? ' class="todo" title="Tasdiqlanishi kerak"' : '') + '><span class="ic">' + icon(c.icon) + '</span><div><b>' + esc(c.title) + '</b><span>' + esc(c.text) + '</span></div></li>'
+    $('creds').innerHTML = t('creds').map(function (c) {
+      return '<li><span class="ic">' + icon(c.icon) + '</span><div><b>' + esc(c.title) + '</b><span>' + esc(c.text) + '</span></div></li>'
     }).join('')
-    document.getElementById('story').innerHTML = t('story').map(function (p, i) {
-      return '<p' + (i === t('story').length - 1 ? ' class="pull"' : '') + '>' + esc(p) + '</p>'
+    $('story').innerHTML = t('story').map(function (p, i, a) {
+      return '<p' + (i === a.length - 1 ? ' class="pull"' : '') + '>' + esc(p) + '</p>'
     }).join('')
-    var q = t('doc_quote')
-    document.getElementById('quote').hidden = !q
+    $('quote').hidden = !t('doc_quote')
 
-    document.getElementById('who-cards').innerHTML = t('who').map(function (c) {
+    $('who-cards').innerHTML = t('who').map(function (c) {
       return '<div class="card"><div class="ic">' + icon(c.icon, 22) + '</div><h3>' + esc(c.title) + '</h3><p>' + esc(c.text) + '</p></div>'
     }).join('')
+    $('steps').innerHTML = t('steps').map(function (s) { return '<li><b>' + esc(s[0]) + '</b><span>' + esc(s[1]) + '</span></li>' }).join('')
 
-    document.getElementById('steps').innerHTML = t('steps').map(function (s) {
-      return '<li><b>' + esc(s[0]) + '</b><span>' + esc(s[1]) + '</span></li>'
-    }).join('')
-
-    document.getElementById('plan-grid').innerHTML = C.plans.map(function (p, i) {
+    $('plan-grid').innerHTML = C.plans.map(function (p, i) {
       var tx = L.plans[i]
       return '<div class="plan' + (p.featured ? ' feat' : '') + '">' + (p.featured ? '<span class="tag">' + esc(t('plan_badge')) + '</span>' : '') +
         '<h3>' + esc(p.name) + '</h3><div class="tl">' + esc(tx.tagline) + '</div>' +
@@ -77,27 +80,31 @@
         '<a class="btn ' + (p.featured ? 'btn-primary' : 'btn-outline') + '" href="#yozilish" data-plan="' + p.key + '">' + esc(t('plan_cta')) + '</a></div>'
     }).join('')
 
-    document.getElementById('faq').innerHTML = t('faq').map(function (f) {
-      return '<details><summary>' + esc(f[0]) + '</summary><p>' + esc(f[1]) + '</p></details>'
+    $('faq').innerHTML = t('faq').map(function (f) { return '<details><summary>' + esc(f[0]) + '</summary><p>' + esc(f[1]) + '</p></details>' }).join('')
+
+    var chips = $('problem-chips')
+    var cur = (chips.querySelector('input:checked') || {}).value
+    chips.innerHTML = C.problemKeys.map(function (k, i) {
+      return '<label class="chip"><input type="radio" name="problem" value="' + k + '"' + (k === cur ? ' checked' : '') + '><span>' + esc(L.problems[i]) + '</span></label>'
     }).join('')
 
-    var chips = document.getElementById('plan-chips')
-    var cur = (chips.querySelector('input:checked') || {}).value || 'consult'
-    var opts = [{ key: 'consult', label: t('opt_consult'), extra: '<small class="free">' + esc(t('free')) + '</small>' }].concat(C.plans.map(function (p) {
-      return { key: p.key, label: p.name, extra: '<small>' + money(p.price) + ' ' + esc(t('sum')) + '</small>' }
-    }))
-    chips.innerHTML = opts.map(function (o) {
-      return '<label class="chip"><input type="radio" name="plan" value="' + o.key + '"' + (o.key === cur ? ' checked' : '') + '><span>' + esc(o.label) + o.extra + '</span></label>'
-    }).join('')
+    var week = $('week'), wv = week.value
+    week.innerHTML = C.weekKeys.map(function (k, i) { return '<option value="' + esc(k) + '">' + esc(L.weeks[i]) + '</option>' }).join('')
+    week.value = wv || ''
 
-    var week = document.getElementById('week')
-    var wv = week.value
-    week.innerHTML = C.weeks.map(function (w, i) { return '<option value="' + i + '">' + esc(L.weeks[i]) + '</option>' }).join('')
-    if (wv) week.value = wv
+    renderPicked()
+    if (state.name) $('s2-title').textContent = t('s2_title').replace('{name}', state.name)
+    renderFiles()
 
-    document.getElementById('addr').innerHTML = '<b>' + esc(t('foot_addr')) + '</b>' + L.addresses.map(function (a) {
+    $('addr').innerHTML = '<b>' + esc(t('foot_addr')) + '</b>' + L.addresses.map(function (a) {
       return '<div>' + esc(a[0]) + ', ' + esc(a[1]) + '<br><small>' + esc(a[2]) + '</small></div>'
     }).join('')
+  }
+
+  function renderPicked() {
+    var p = C.plans.filter(function (x) { return x.key === state.plan })[0]
+    $('picked').hidden = !p
+    if (p) $('picked-text').textContent = t('picked').replace('{plan}', p.name + ' · ' + money(p.price) + ' ' + t('sum'))
   }
 
   document.querySelectorAll('[data-lang]').forEach(function (b) {
@@ -108,16 +115,17 @@
     })
   })
 
-  // "Yozilish" tugmalari kerakli variantni formada tanlab qo'yadi
+  // Tarif tugmasi formada shu tarifni belgilaydi; "maslahat" tugmasi — bepul maslahat
   document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('[data-plan]')
     if (!a) return
-    var r = document.querySelector('#plan-chips input[value="' + a.dataset.plan + '"]')
-    if (r) r.checked = true
+    state.plan = a.dataset.plan
+    renderPicked()
   })
+  $('picked-x').addEventListener('click', function () { state.plan = 'consult'; renderPicked() })
 
   // Telefon: +998 XX XXX XX XX
-  var phone = document.getElementById('phone')
+  var phone = $('phone')
   function digits(v) { var d = v.replace(/\D/g, ''); if (d.indexOf('998') === 0) d = d.slice(3); return d.slice(0, 9) }
   function fmt(d) {
     var out = '+998'
@@ -128,63 +136,149 @@
     return out
   }
   phone.addEventListener('focus', function () { if (!phone.value) phone.value = '+998 ' })
-  phone.addEventListener('input', function () { phone.value = fmt(digits(phone.value)); document.getElementById('f-phone').classList.remove('bad') })
-  document.getElementById('name').addEventListener('input', function () { document.getElementById('f-name').classList.remove('bad') })
+  phone.addEventListener('input', function () { phone.value = fmt(digits(phone.value)); $('f-phone').classList.remove('bad') })
+  $('name').addEventListener('input', function () { $('f-name').classList.remove('bad') })
 
-  var form = document.getElementById('lead-form')
-  var alertBox = document.getElementById('form-alert')
-  var btn = document.getElementById('submit')
+  function post(path, body) {
+    if (REVIEW) return new Promise(function (res) { setTimeout(function () { res({ ok: true, token: 'review' }) }, 400) })
+    return fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {} }).then(function (j) { if (!r.ok) { var e = new Error(j.message || r.status); e.status = r.status; throw e } return j }) })
+  }
+
+  /* --- 1-qadam --- */
+  var form = $('lead-form'), alertBox = $('form-alert'), btn = $('submit')
   form.addEventListener('submit', function (e) {
     e.preventDefault()
     alertBox.classList.remove('show')
     var name = form.name.value.trim()
     var d = digits(phone.value)
     var ok = true
-    if (name.length < 2) { document.getElementById('f-name').classList.add('bad'); ok = false }
-    if (d.length !== 9) { document.getElementById('f-phone').classList.add('bad'); ok = false }
+    if (name.length < 2) { $('f-name').classList.add('bad'); ok = false }
+    if (d.length !== 9) { $('f-phone').classList.add('bad'); ok = false }
     if (!ok) { (name.length < 2 ? form.name : phone).focus(); return }
-
-    var planKey = (form.querySelector('input[name=plan]:checked') || {}).value || 'consult'
-    var plan = C.plans.filter(function (p) { return p.key === planKey })[0]
-    var payload = {
-      name: name,
-      phone: '+998' + d,
-      // qabul-bot faqat ma'lum tarif nomlarini qabul qiladi; maslahat = "Bilmayman, maslahat kerak"
-      plan: plan ? plan.name : 'Bilmayman, maslahat kerak',
-      week: C.weeks[Number(form.week.value) || 0],
-      source: utm.source,
-      campaign: utm.campaign,
-      content: utm.content || (plan ? 'NIPT' : 'Bepul genetik maslahat'),
-      website: form.website.value
-    }
+    var problem = (form.querySelector('input[name=problem]:checked') || {}).value || ''
+    var wk = $('week').value
     btn.disabled = true
     btn.textContent = t('f_sending')
-    // Ko'rib chiqish nusxasi (claude.ai havolasi): ariza yuborilmaydi, faqat natija ekrani ko'rsatiladi
-    var send = window.REVIEW_MODE
-      ? Promise.resolve({ ok: true, json: function () { return { ok: true } } })
-      : fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    send
-      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
-      .then(function (j) {
-        if (!j.ok) throw new Error('not ok')
-        document.getElementById('ok-title').textContent = t('ok_title').replace('{name}', name)
-        document.getElementById('form-box').classList.add('sent')
-        try { if (window.fbq) window.fbq('track', 'Lead') } catch (e2) {}
+    post('', {
+      name: name,
+      phone: '+998' + d,
+      plan: state.plan,
+      problem: problem,
+      weeks: wk && wk !== 'no' ? wk : '',
+      pregnant: wk === 'no' ? 'no' : '',
+      source: utm.source,
+      campaign: utm.campaign,
+      content: utm.content,
+      website: form.website.value
+    }).then(function (j) {
+      state.token = j.token || ''
+      state.name = name
+      try { if (window.fbq) window.fbq('track', 'Lead') } catch (e2) {}
+      form.hidden = true
+      $('s2-title').textContent = t('s2_title').replace('{name}', name)
+      $('details-form').hidden = false
+      $('form-box').scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }).catch(function (err) {
+      alertBox.textContent = err.status === 429 ? t('e_rate') : t('e_send')
+      alertBox.classList.add('show')
+    }).then(function () { btn.disabled = false; btn.textContent = t('f_submit') })
+  })
+
+  /* --- 2-qadam --- */
+  function finish(withDetails) {
+    $('ok-title').textContent = withDetails ? t('ok_title2') : t('ok_title').replace('{name}', state.name)
+    $('ok-text').textContent = withDetails ? t('ok_text2') : t('ok_text')
+    $('form-box').classList.add('sent')
+  }
+  $('details-skip').addEventListener('click', function () { finish(false) })
+
+  function renderFiles() {
+    $('file-list').innerHTML = state.files.map(function (f, i) {
+      var st = f.status === 'ok' ? '<span class="st ok">✓</span>'
+        : f.status === 'up' ? '<span class="st">' + esc(t('s2_sending')) + '</span>'
+        : f.error ? '<span class="st bad">' + esc(t(f.error)) + '</span>' : '<span class="st">' + Math.max(1, Math.round(f.file.size / 1024)) + ' KB</span>'
+      return '<li><span aria-hidden="true">' + (/pdf/.test(f.file.type) ? '📄' : '🖼') + '</span><span class="nm">' + esc(f.file.name) + '</span>' + st +
+        (f.status ? '' : '<button type="button" data-rm="' + i + '" aria-label="✕">✕</button>') + '</li>'
+    }).join('')
+  }
+  $('file-list').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-rm]')
+    if (b) { state.files.splice(Number(b.dataset.rm), 1); renderFiles() }
+  })
+  $('files').addEventListener('change', function (e) {
+    var list = Array.prototype.slice.call(e.target.files || [])
+    $('details-alert').classList.remove('show')
+    list.forEach(function (file) {
+      if (state.files.length >= MAX_FILES) return showDetailsError(t('s2_max'))
+      var item = { file: file }
+      if (!/^image\//.test(file.type) && file.type !== 'application/pdf' && !/\.(pdf|heic|heif|jpe?g|png|webp)$/i.test(file.name)) item.error = 's2_bad_type'
+      else if (file.size > MAX_SIZE && !/^image\/(jpeg|png|webp)$/.test(file.type)) item.error = 's2_too_big'
+      state.files.push(item)
+    })
+    e.target.value = ''
+    renderFiles()
+  })
+
+  // Telefondan olingan katta rasmlarni kichraytiramiz (o'qilishi saqlanadi, yuklash tezlashadi)
+  function shrink(file) {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 1.5 * 1024 * 1024 || !window.createImageBitmap) return Promise.resolve(file)
+    return createImageBitmap(file).then(function (bmp) {
+      var k = Math.min(1, 2400 / Math.max(bmp.width, bmp.height))
+      var c = document.createElement('canvas')
+      c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k)
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height)
+      return new Promise(function (res) { c.toBlob(function (b) { res(b && b.size < file.size ? b : file) }, 'image/jpeg', 0.85) })
+    }).catch(function () { return file })
+  }
+  function uploadOne(item) {
+    item.status = 'up'; renderFiles()
+    if (REVIEW) return new Promise(function (res) { setTimeout(function () { item.status = 'ok'; renderFiles(); res() }, 500) })
+    return shrink(item.file).then(function (blob) {
+      if (blob.size > MAX_SIZE) throw Object.assign(new Error('big'), { key: 's2_too_big' })
+      var name = blob === item.file ? item.file.name : item.file.name.replace(/\.[^.]+$/, '') + '.jpg'
+      return fetch(API + '/file?token=' + encodeURIComponent(state.token) + '&name=' + encodeURIComponent(name), {
+        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob
       })
-      .catch(function (err) {
-        alertBox.textContent = String(err.message) === '429' ? t('e_rate') : t('e_send')
-        alertBox.classList.add('show')
+    }).then(function (r) {
+      if (!r.ok) throw Object.assign(new Error(String(r.status)), { key: r.status === 415 ? 's2_bad_type' : r.status === 413 ? 's2_too_big' : 's2_failed' })
+      item.status = 'ok'
+    }).catch(function (e) { item.status = ''; item.error = e.key || 's2_failed'; item.done = true })
+      .then(renderFiles)
+  }
+  function showDetailsError(msg) { var a = $('details-alert'); a.textContent = msg; a.classList.add('show') }
+
+  $('details-form').addEventListener('submit', function (e) {
+    e.preventDefault()
+    $('details-alert').classList.remove('show')
+    var text = $('details').value.trim()
+    var pending = state.files.filter(function (f) { return !f.error && f.status !== 'ok' })
+    if (!text && !pending.length && !state.files.some(function (f) { return f.status === 'ok' })) return showDetailsError(t('s2_need'))
+    if (!$('consent').checked) return showDetailsError(t('s2_need_consent'))
+    var sb = $('details-submit')
+    sb.disabled = true; sb.textContent = t('s2_sending')
+    post('/details', { token: state.token, text: text, consent: true })
+      .then(function () {
+        return pending.reduce(function (p, item) { return p.then(function () { return uploadOne(item) }) }, Promise.resolve())
       })
-      .then(function () { btn.disabled = false; btn.textContent = t('f_submit') })
+      .then(function () { return post('/complete', { token: state.token }).catch(function () {}) })
+      .then(function () {
+        var failed = state.files.filter(function (f) { return f.error && f.done })
+        // Yuklanmagan fayl qizil belgida qoladi: bemor uni olib tashlab, qolganini yuborishi mumkin
+        if (failed.length) { failed.forEach(function (f) { f.done = false }); return showDetailsError(t('e_send')) }
+        finish(true)
+      })
+      .catch(function (err) { showDetailsError(err.status === 410 ? err.message : t('e_send')) })
+      .then(function () { sb.disabled = false; sb.textContent = t('s2_send') })
   })
 
   // Mobil pastki tugma: hero'dan o'tgach ko'rinadi, forma ko'rinayotganda yashirinadi
-  var sticky = document.getElementById('sticky')
+  var sticky = $('sticky')
   var heroGone = false, formSeen = false
   function upd() { sticky.classList.toggle('show', heroGone && !formSeen) }
   if ('IntersectionObserver' in window) {
     new IntersectionObserver(function (es) { heroGone = !es[0].isIntersecting; upd() }).observe(document.querySelector('.hero'))
-    new IntersectionObserver(function (es) { formSeen = es[0].isIntersecting; upd() }, { threshold: .15 }).observe(document.getElementById('yozilish'))
+    new IntersectionObserver(function (es) { formSeen = es[0].isIntersecting; upd() }, { threshold: .15 }).observe($('yozilish'))
   }
 
   render()

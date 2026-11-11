@@ -130,7 +130,7 @@
         <div class="alert" id="form-alert" role="alert"></div>
         <div class="field" id="f-name">
           <label for="name" data-i18n="f_name"></label>
-          <input id="name" name="name" autocomplete="given-name" maxlength="80" required>
+          <input id="name" name="name" autocomplete="name" maxlength="80" required>
           <span class="err" data-i18n="e_name"></span>
         </div>
         <div class="field" id="f-phone">
@@ -139,21 +139,45 @@
           <span class="err" data-i18n="e_phone"></span>
         </div>
         <fieldset class="field">
-          <legend data-i18n="f_plan"></legend>
-          <div class="chips" id="plan-chips"></div>
+          <legend data-i18n="f_problem"></legend>
+          <div class="chips pills" id="problem-chips"></div>
         </fieldset>
         <div class="field">
           <label for="week" data-i18n="f_week"></label>
           <select id="week" name="week"></select>
         </div>
+        <div class="picked" id="picked" hidden><span id="picked-text"></span><button type="button" id="picked-x" aria-label="✕">✕</button></div>
         <div class="hp" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
         <button class="btn btn-primary" type="submit" id="submit" data-i18n="f_submit"></button>
         <p class="note" data-i18n="f_note"></p>
       </form>
+
+      <form id="details-form" class="step2" novalidate hidden>
+        <div class="step2-head">
+          <div class="ok sm"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></div>
+          <div><h3 id="s2-title"></h3><p data-i18n="s2_sub"></p></div>
+        </div>
+        <div class="alert" id="details-alert" role="alert"></div>
+        <div class="field">
+          <label for="details" data-i18n="s2_text"></label>
+          <textarea id="details" name="details" rows="4" maxlength="3000"></textarea>
+        </div>
+        <div class="field">
+          <span class="lbl" data-i18n="s2_files"></span>
+          <label class="drop" for="files"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg><span data-i18n="s2_pick"></span></label>
+          <input id="files" type="file" accept="application/pdf,image/*" multiple hidden>
+          <ul class="files" id="file-list"></ul>
+          <small class="hint" data-i18n="s2_hint"></small>
+        </div>
+        <label class="consent"><input type="checkbox" id="consent"><span data-i18n="s2_consent"></span></label>
+        <button class="btn btn-primary" type="submit" id="details-submit" data-i18n="s2_send"></button>
+        <button class="btn-link" type="button" id="details-skip" data-i18n="s2_skip"></button>
+      </form>
+
       <div class="form-msg" role="status" aria-live="polite">
         <div class="ok"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></div>
         <h3 id="ok-title"></h3>
-        <p data-i18n="ok_text"></p>
+        <p id="ok-text"></p>
       </div>
       <div class="form-alt">
         <a href="tel:+998937391977">📞 +998 93 739 19 77</a>
